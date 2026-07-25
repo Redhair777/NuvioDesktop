@@ -88,46 +88,50 @@ jobs:
             Write-Error "No MSI file found for verification"
             exit 1
           }
-          Write-Host "Verifying libmpv-2.dll inside MSI: $($msi.FullName) ($($msi.Length) bytes)"
-          $extractDir = Join-Path $env:RUNNER_TEMP "msi-verify"
-          Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
-          Write-Host "=== Full 7-Zip extraction output ==="
-          & "$env:ProgramFiles\7-Zip\7z.exe" x "$($msi.FullName)" -o"$extractDir" -y -bd 2>&1
-          Write-Host "=== Listing all large files (>10MB) in extracted MSI ==="
-          Get-ChildItem -Recurse $extractDir | Where-Object { $_.Length -gt 10MB } | Sort-Object Length -Descending | ForEach-Object {
-            Write-Host "  $($_.FullName): $($_.Length) bytes"
-          }
-          Write-Host "=== Searching all sources for libmpv-2.dll in extracted MSI ==="
-          Get-ChildItem -Recurse -Filter *.jar $extractDir | ForEach-Object {
-            $jar = $_.FullName
-            Write-Host "Checking JAR: $($jar) ($($_.Length) bytes)"
-            & "$env:ProgramFiles\7-Zip\7z.exe" l "$jar" *libmpv-2.dll 2>&1 | Select-String -Pattern "libmpv-2" | ForEach-Object {
-              Write-Host "Found in JAR! $_"
-              & "$env:ProgramFiles\7-Zip\7z.exe" x "$jar" -o"$extractDir\jar-out" -y *libmpv-2.dll -bd 2>&1 | Out-Null
-            }
-          }
-          $dllFiles = Get-ChildItem -Recurse -Filter libmpv-2.dll $extractDir
-          if (-not $dllFiles) {
-            Write-Host "=== Listing ALL extracted files ==="
-            Get-ChildItem -Recurse $extractDir | ForEach-Object { Write-Host "  $($_.FullName): $($_.Length) bytes" }
-            Write-Error "libmpv-2.dll not found anywhere inside the extracted MSI."
+          Write-Host "MSI: $($msi.FullName) ($($msi.Length) bytes)"
+          $expectedHash = "07c68bb211f23a218ded0a36eb12207dc3aeb44e5318ffca6ce9dcc7c3173906"
+          $expectedSize = 115320296
+
+          Write-Host "=== STEP 1: SHA256 content verification (7-Zip CAB extraction) ==="
+          $cabDir = Join-Path $env:RUNNER_TEMP "msi-cab-extract"
+          Remove-Item -Recurse -Force $cabDir -ErrorAction SilentlyContinue
+          & "$env:ProgramFiles\7-Zip\7z.exe" x "$($msi.FullName)" -o"$cabDir" -y -bd 2>&1 | Select-Object -Last 3
+          $bigFiles = Get-ChildItem -Recurse $cabDir | Where-Object { $_.Length -gt 100MB } | Sort-Object Length -Descending
+          if (-not $bigFiles) { Write-Error "FAIL: No >=100MB file in CAB extract"; exit 1 }
+          $cabFile = $bigFiles | Sort-Object { [Math]::Abs($_.Length - $expectedSize) } | Select-Object -First 1
+          $cabHash = (Get-FileHash -Path $cabFile.FullName -Algorithm SHA256).Hash.ToLower()
+          Write-Host "CAB file: $($cabFile.FullName)"
+          Write-Host "Size: $($cabFile.Length) bytes (expect $expectedSize)"
+          Write-Host "SHA256: $cabHash"
+          Write-Host "Expect: $expectedHash"
+          if ($cabFile.Length -ne $expectedSize) { Write-Error "FAIL: CAB size mismatch"; exit 1 }
+          if ($cabHash -ne $expectedHash) { Write-Error "FAIL: CAB SHA256 mismatch"; exit 1 }
+          Write-Host "PASS: STEP 1 - SHA256 and size match expected values"
+
+          Write-Host "=== STEP 2: msiexec /a admin install (real filenames) ==="
+          $adminDir = "C:\msi-admin-extract"
+          Remove-Item -Recurse -Force $adminDir -ErrorAction SilentlyContinue
+          $p = Start-Process msiexec -ArgumentList @("/a", "`"$($msi.FullName)`"", "/qn", "TARGETDIR=`"$adminDir`"") -Wait -PassThru
+          Write-Host "msiexec exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { Write-Error "FAIL: msiexec /a exited with code $($p.ExitCode)"; exit 1 }
+          Start-Sleep -Seconds 5
+          $dllPath = Get-ChildItem -Recurse $adminDir -Filter "libmpv-2.dll" | Select-Object -First 1
+          if (-not $dllPath) {
+            Write-Host "Admin install dir listing:"
+            Get-ChildItem -Recurse $adminDir | ForEach-Object { Write-Host "  $($_.FullName): $($_.Length) bytes" }
+            Write-Error "FAIL: libmpv-2.dll not found in admin install output"
             exit 1
           }
-          Write-Host "=== All libmpv-2.dll instances found ==="
-          $maxSize = 0
-          $maxPath = ""
-          foreach ($dll in $dllFiles) {
-            $size = $dll.Length
-            $loc = if ($dll.FullName -match '\\(jar-out|\.jar)\\') { "inside-JAR" } else { "standalone (appResourcesRootDir)" }
-            Write-Host "  $($dll.FullName): $size bytes ($loc)"
-            if ($size -gt $maxSize) { $maxSize = $size; $maxPath = $dll.FullName }
-          }
-          if ($maxSize -ge 100000000) {
-            Write-Host "PASS: libmpv-2.dll found at full size ($maxSize bytes) at: $maxPath"
-          } else {
-            Write-Error "FAIL: Largest libmpv-2.dll found is only $maxSize bytes (expected ~115,320,296). Location: $maxPath"
-            exit 1
-          }
+          $dllHash = (Get-FileHash -Path $dllPath.FullName -Algorithm SHA256).Hash.ToLower()
+          Write-Host "Found: $($dllPath.FullName)"
+          Write-Host "Size: $($dllPath.Length) bytes (expect $expectedSize)"
+          Write-Host "SHA256: $dllHash"
+          Write-Host "Expect: $expectedHash"
+          if ($dllPath.Length -ne $expectedSize) { Write-Error "FAIL: admin-install size mismatch"; exit 1 }
+          if ($dllHash -ne $expectedHash) { Write-Error "FAIL: admin-install SHA256 mismatch"; exit 1 }
+          Write-Host "PASS: STEP 2 - libmpv-2.dll found at correct name, size, and hash"
+
+          Write-Host "=== ALL CHECKS PASSED ==="
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v6
