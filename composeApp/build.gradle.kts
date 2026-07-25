@@ -1198,6 +1198,9 @@ compose.desktop {
             if (isMacHost) {
                 appResourcesRootDir.set(macosPlayerAppResourcesRoot)
             }
+            if (isWindowsHost) {
+                appResourcesRootDir.set(windowsPlayerAppResourcesRoot)
+            }
             modules(
                 "java.instrument",
                 "java.management",
