@@ -938,15 +938,6 @@ val prepareWindowsPlayerAppResources = tasks.register<Sync>("prepareWindowsPlaye
     into(windowsPlayerAppResourcesRoot.map { it.dir("windows/native/windows") })
 }
 
-val injectWindowsPlayerRuntime = tasks.register<Sync>("injectWindowsPlayerRuntime") {
-    enabled = isWindowsHost
-    dependsOn(prepareWindowsPlayerRuntime, generateWindowsPlayerRuntimeIndex, tasks.matching { it.name == "prepareAppResources" })
-    into(layout.buildDirectory.dir("compose/tmp/packageReleaseMsi/libs"))
-    from(windowsPlayerRuntimeOutput) {
-        include("*.dll")
-    }
-}
-
 tasks.withType<Jar>().configureEach {
     if (isWindowsHost && name == "desktopJar") {
         dependsOn(buildWindowsPlayerBridge, prepareWindowsPlayerRuntime, generateWindowsPlayerRuntimeIndex)
@@ -962,6 +953,9 @@ tasks.withType<Jar>().configureEach {
 tasks.matching { it.name == "prepareAppResources" }.configureEach {
     if (isMacHost) {
         dependsOn(prepareMacosPlayerAppResources)
+    }
+    if (isWindowsHost) {
+        dependsOn(prepareWindowsPlayerAppResources)
     }
 }
 
@@ -996,7 +990,7 @@ if (isWindowsHost) {
         "packageReleaseUberJarForCurrentOS",
     )
     tasks.matching { it.name in desktopNativePlayerTasks }.configureEach {
-        dependsOn(buildWindowsPlayerBridge, prepareWindowsPlayerRuntime, generateWindowsPlayerRuntimeIndex, prepareWindowsPlayerAppResources, injectWindowsPlayerRuntime)
+        dependsOn(buildWindowsPlayerBridge, prepareWindowsPlayerRuntime, generateWindowsPlayerRuntimeIndex, prepareWindowsPlayerAppResources)
     }
 }
 
