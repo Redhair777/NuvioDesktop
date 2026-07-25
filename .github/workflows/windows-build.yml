@@ -37,8 +37,12 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Create local.properties
+        run: |
+          New-Item -ItemType File -Name "local.properties" -Value ""
+
       - name: Build Windows MSI
-        run: ./gradlew :composeApp:packageReleaseMsi --stacktrace
+        run: ./gradlew :composeApp:packageReleaseMsi --stacktrace --no-configuration-cache
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v6
