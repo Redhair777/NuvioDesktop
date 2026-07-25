@@ -22,25 +22,32 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
+          lfs: true
 
-      - name: Fetch real libmpv-2.dll (replace LFS pointer)
+      - name: Fetch real LFS objects (fallback to upstream if fork has none)
         shell: pwsh
         run: |
-          $dllPath = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
-          $stubSize = 134L
-          if ((Get-Item $dllPath).Length -eq $stubSize) {
-            Write-Warning "libmpv-2.dll is a $stubSize-byte LFS pointer; downloading real binary from upstream CDN..."
-            $url = "https://media.githubusercontent.com/media/NuvioMedia/NuvioDesktop/Dev/composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
-            Invoke-WebRequest -Uri $url -OutFile $dllPath
-            $actualSize = (Get-Item $dllPath).Length
-            if ($actualSize -lt 100000000) {
-              Write-Error "libmpv-2.dll is too small ($actualSize bytes) after download. Expected ~115,320,296."
-              exit 1
-            }
-            Write-Host "libmpv-2.dll downloaded: $actualSize bytes"
+          $dll = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
+          if ((Get-Item $dll).Length -lt 1000) {
+            Write-Warning "libmpv-2.dll is an LFS pointer; fetching from upstream..."
+            git remote add upstream https://github.com/NuvioMedia/NuvioDesktop.git 2>`$null
+            git lfs fetch upstream HEAD
+            git lfs checkout
           } else {
-            Write-Host "libmpv-2.dll already real: $((Get-Item $dllPath).Length) bytes"
+            Write-Host "libmpv-2.dll is real ($((Get-Item $dll).Length) bytes)"
           }
+
+      - name: Verify libmpv-2.dll in working tree after LFS fetch
+        shell: pwsh
+        run: |
+          $dll = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
+          $size = (Get-Item $dll).Length
+          Write-Host "libmpv-2.dll in working tree: $size bytes"
+          if ($size -lt 100000000) {
+            Write-Error "libmpv-2.dll in working tree is too small ($size bytes). Expected ~115,320,296."
+            exit 1
+          }
+          Write-Host "PASS: libmpv-2.dll in working tree is valid ($size bytes)"
 
       - name: Install WebView2 NuGet package
         shell: pwsh
