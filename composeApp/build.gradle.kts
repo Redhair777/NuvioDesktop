@@ -990,7 +990,7 @@ if (isWindowsHost) {
         "packageReleaseUberJarForCurrentOS",
     )
     tasks.matching { it.name in desktopNativePlayerTasks }.configureEach {
-        dependsOn(buildWindowsPlayerBridge, prepareWindowsPlayerRuntime, generateWindowsPlayerRuntimeIndex)
+        dependsOn(buildWindowsPlayerBridge, prepareWindowsPlayerRuntime, generateWindowsPlayerRuntimeIndex, prepareWindowsPlayerAppResources)
     }
 }
 
