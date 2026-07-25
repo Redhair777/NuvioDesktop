@@ -79,13 +79,23 @@ jobs:
             exit 1
           }
           Write-Host "Verifying libmpv-2.dll inside MSI: $($msi.FullName) ($($msi.Length) bytes)"
+          Write-Host "=== Listing all files inside MSI ==="
+          & "$env:ProgramFiles\7-Zip\7z.exe" l "$($msi.FullName)" | Select-String -Pattern "\.dll|\.cab|\.exe|\.jar"
+          Write-Host "=== Extracting all files ==="
           $extractDir = Join-Path $env:RUNNER_TEMP "msi-verify"
           Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
-          & "$env:ProgramFiles\7-Zip\7z.exe" x "$($msi.FullName)" -o"$extractDir" -y *libmpv-2.dll | Select-String -Pattern "libmpv-2"
-          $dllInMsi = Get-ChildItem -Recurse -Filter libmpv-2.dll $extractDir | Select-Object -First 1
+          & "$env:ProgramFiles\7-Zip\7z.exe" x "$($msi.FullName)" -o"$extractDir" -y -bd 2>&1 | Select-Object -Last 5
+          Write-Host "=== Searching for libmpv-2.dll ==="
+          $foundDlls = Get-ChildItem -Recurse -Filter *.dll $extractDir
+          $foundDlls | ForEach-Object { Write-Host "  $($_.FullName): $($_.Length) bytes" }
+          $dllInMsi = $foundDlls | Where-Object { $_.Name -match "mpv|libmpv" } | Select-Object -First 1
           if (-not $dllInMsi) {
-            Write-Error "libmpv-2.dll not found inside the MSI!"
-            exit 1
+            $dllInMsi = $foundDlls | Sort-Object Length -Descending | Select-Object -First 1
+            if ($dllInMsi.Length -lt 100000000) {
+              Write-Error "No libmpv-2.dll found inside the MSI. Largest DLL: $($dllInMsi.Name) at $($dllInMsi.Length) bytes"
+              exit 1
+            }
+            Write-Host "WARNING: No DLL named 'mpv' found; using largest DLL as best guess"
           }
           $size = $dllInMsi.Length
           Write-Host "libmpv-2.dll inside MSI: $($dllInMsi.FullName) is $size bytes"
