@@ -577,6 +577,7 @@ private fun MobileSettingsScreen(
                             onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
                             onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
                             onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
+                            onRedTrackClick = { onPageChange(SettingsPage.RedTrack) },
                             onSupportersContributorsClick = onSupportersContributorsClick,
                             onLicensesAttributionsClick = onLicensesAttributionsClick,
                             onCheckForUpdatesClick = onCheckForUpdatesClick,
@@ -715,6 +716,9 @@ private fun MobileSettingsScreen(
                     settingsUiState = traktSettingsUiState,
                     commentsEnabled = traktCommentsEnabled,
                     onCommentsEnabledChange = TraktCommentsSettings::setEnabled,
+                )
+                SettingsPage.RedTrack -> redTrackSettingsContent(
+                    isTablet = false,
                 )
             }
         }
@@ -995,6 +999,7 @@ private fun TabletSettingsScreen(
                                     onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
                                     onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
                                     onTraktClick = { openInlinePage(SettingsPage.TraktAuthentication) },
+                                    onRedTrackClick = { openInlinePage(SettingsPage.RedTrack) },
                                     onSupportersContributorsClick = { openInlinePage(SettingsPage.SupportersContributors) },
                                     onLicensesAttributionsClick = { openInlinePage(SettingsPage.LicensesAttributions) },
                                     onCheckForUpdatesClick = onCheckForUpdatesClick,
@@ -1137,6 +1142,9 @@ private fun TabletSettingsScreen(
                             settingsUiState = traktSettingsUiState,
                             commentsEnabled = traktCommentsEnabled,
                             onCommentsEnabledChange = TraktCommentsSettings::setEnabled,
+                        )
+                        SettingsPage.RedTrack -> redTrackSettingsContent(
+                            isTablet = true,
                         )
                     }
                 }

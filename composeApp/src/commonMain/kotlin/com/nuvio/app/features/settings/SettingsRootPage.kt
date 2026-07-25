@@ -53,6 +53,8 @@ import nuvio.composeapp.generated.resources.compose_settings_root_advanced_descr
 import nuvio.composeapp.generated.resources.compose_settings_root_advanced_section
 import nuvio.composeapp.generated.resources.compose_settings_page_content_discovery
 import nuvio.composeapp.generated.resources.compose_settings_page_trakt
+import nuvio.composeapp.generated.resources.settings_redtrack_caption
+import nuvio.composeapp.generated.resources.settings_redtrack_title
 import nuvio.composeapp.generated.resources.settings_playback_subtitle
 import nuvio.composeapp.generated.resources.updates_debug_test_description
 import nuvio.composeapp.generated.resources.updates_debug_test_title
@@ -69,6 +71,7 @@ internal fun LazyListScope.settingsRootContent(
     onContentDiscoveryClick: () -> Unit,
     onIntegrationsClick: () -> Unit,
     onTraktClick: () -> Unit,
+    onRedTrackClick: () -> Unit,
     onSupportersContributorsClick: () -> Unit,
     onLicensesAttributionsClick: () -> Unit,
     onCheckForUpdatesClick: (() -> Unit)? = null,
@@ -115,6 +118,14 @@ internal fun LazyListScope.settingsRootContent(
                         iconPainter = integrationLogoPainter(IntegrationLogo.Trakt),
                         isTablet = isTablet,
                         onClick = onTraktClick,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.settings_redtrack_title),
+                        description = stringResource(Res.string.settings_redtrack_caption),
+                        icon = Icons.Rounded.Link,
+                        isTablet = isTablet,
+                        onClick = onRedTrackClick,
                     )
                 }
             }

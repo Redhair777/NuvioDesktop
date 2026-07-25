@@ -70,6 +70,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         lastProgressPersistEpochMs = 0L
         previousIsPlaying = false
         pendingScrobbleStartAfterSeek = false
+        pendingRedTrackScrobbleStartAfterSeek = false
         seekProgressSyncJob?.cancel()
         seekProgressSyncJob = null
         accumulatedSeekResetJob?.cancel()
@@ -355,6 +356,13 @@ private fun PlayerScreenRuntime.BindPlayerUiVisibilityEffects() {
             emitTraktScrobbleStart()
         } else if (!previousIsPlaying && playbackSnapshot.isPlaying) {
             emitTraktScrobbleStart()
+        }
+
+        if (playbackSnapshot.isPlaying && pendingRedTrackScrobbleStartAfterSeek) {
+            pendingRedTrackScrobbleStartAfterSeek = false
+            emitRedTrackScrobbleStart()
+        } else if (!previousIsPlaying && playbackSnapshot.isPlaying) {
+            emitRedTrackScrobbleStart()
         }
 
         if (!playbackSnapshot.isLoading) {

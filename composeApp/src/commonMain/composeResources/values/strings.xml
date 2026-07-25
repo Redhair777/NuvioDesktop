@@ -2082,4 +2082,10 @@
         <item quantity="one">%d title</item>
         <item quantity="other">%d titles</item>
     </plurals>
+    <string name="settings_redtrack_title">red-track</string>
+    <string name="settings_redtrack_caption">Configure your red-track instance. Get your API key from Settings > API Keys on your red-track server.</string>
+    <string name="settings_redtrack_base_url">Base URL</string>
+    <string name="settings_redtrack_api_key">API Key</string>
+    <string name="settings_redtrack_save">Save</string>
+    <string name="settings_redtrack_saved">Saved.</string>
 </resources>

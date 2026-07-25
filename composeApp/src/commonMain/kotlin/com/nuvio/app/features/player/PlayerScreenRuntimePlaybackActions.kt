@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.features.redtrack.RedTrackScrobbleRepository
 import com.nuvio.app.features.tmdb.TmdbService
 import com.nuvio.app.features.trakt.TraktScrobbleRepository
 import com.nuvio.app.features.watchprogress.WatchProgressClock
@@ -56,6 +57,7 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
         lastProgressPersistEpochMs = 0L
         previousIsPlaying = false
         pendingScrobbleStartAfterSeek = false
+        pendingRedTrackScrobbleStartAfterSeek = false
         autoFetchedAddonSubtitlesForKey = null
         trackPreferenceRestoreApplied = false
         preferredAudioSelectionApplied = false
@@ -70,6 +72,11 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
         pendingScrobbleStartAfterSeek = false
         hasSentCompletionScrobbleForCurrentItem = false
         currentTraktScrobbleItem = null
+        hasRequestedRedTrackScrobbleStartForCurrentItem = false
+        redTrackScrobbleStartRequestGeneration = 0L
+        pendingRedTrackScrobbleStartAfterSeek = false
+        hasSentCompletionRedTrackScrobbleForCurrentItem = false
+        currentRedTrackScrobbleItem = null
     }
 }
 
@@ -100,6 +107,40 @@ internal fun PlayerScreenRuntime.snapshotTraktScrobbleItemInputs() = TraktScrobb
     episodeNumber = activeEpisodeNumber,
     episodeTitle = activeEpisodeTitle,
 )
+
+internal data class RedTrackScrobbleItemInputs(
+    val contentType: String,
+    val parentMetaId: String,
+    val videoId: String?,
+    val title: String,
+    val seasonNumber: Int?,
+    val episodeNumber: Int?,
+    val episodeTitle: String?,
+)
+
+internal fun PlayerScreenRuntime.snapshotRedTrackScrobbleItemInputs() = RedTrackScrobbleItemInputs(
+    contentType = contentType ?: parentMetaType,
+    parentMetaId = parentMetaId,
+    videoId = activeVideoId,
+    title = title,
+    seasonNumber = activeSeasonNumber,
+    episodeNumber = activeEpisodeNumber,
+    episodeTitle = activeEpisodeTitle,
+)
+
+private suspend fun RedTrackScrobbleItemInputs.buildRedTrackItem(): com.nuvio.app.features.redtrack.RedTrackScrobbleItem? =
+    RedTrackScrobbleRepository.buildItem(
+        contentType = contentType,
+        parentMetaId = parentMetaId,
+        videoId = videoId,
+        title = title,
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber,
+        episodeTitle = episodeTitle,
+    )
+
+internal suspend fun PlayerScreenRuntime.currentRedTrackScrobbleItem() =
+    snapshotRedTrackScrobbleItemInputs().buildRedTrackItem()
 
 private suspend fun TraktScrobbleItemInputs.buildItem() =
     TraktScrobbleRepository.buildItem(
@@ -159,6 +200,63 @@ internal fun PlayerScreenRuntime.emitTraktScrobbleStop(progressPercent: Float? =
     scrobbleStartRequestGeneration += 1L
 }
 
+internal fun PlayerScreenRuntime.emitRedTrackScrobbleStart() {
+    if (hasRequestedRedTrackScrobbleStartForCurrentItem) return
+    hasRequestedRedTrackScrobbleStartForCurrentItem = true
+    val requestGeneration = redTrackScrobbleStartRequestGeneration + 1L
+    redTrackScrobbleStartRequestGeneration = requestGeneration
+
+    scope.launch {
+        val item = currentRedTrackScrobbleItem()
+        if (item == null) {
+            hasRequestedRedTrackScrobbleStartForCurrentItem = false
+            return@launch
+        }
+        if (requestGeneration != redTrackScrobbleStartRequestGeneration || !hasRequestedRedTrackScrobbleStartForCurrentItem) {
+            return@launch
+        }
+        currentRedTrackScrobbleItem = item
+        RedTrackScrobbleRepository.scrobbleStart(
+            profileId = profileId,
+            item = item,
+            progressPercent = currentPlaybackProgressPercent(),
+        )
+    }
+}
+
+internal fun PlayerScreenRuntime.emitRedTrackScrobbleStop(progressPercent: Float? = null) {
+    val provided = progressPercent
+    if (!hasRequestedRedTrackScrobbleStartForCurrentItem && (provided ?: 0f) < 80f) return
+
+    val percent = provided ?: currentPlaybackProgressPercent()
+    val itemSnapshot = currentRedTrackScrobbleItem
+    val inputsSnapshot = snapshotRedTrackScrobbleItemInputs()
+    scope.launch(NonCancellable) {
+        val item = itemSnapshot ?: inputsSnapshot.buildRedTrackItem() ?: return@launch
+        RedTrackScrobbleRepository.scrobbleStop(
+            profileId = profileId,
+            item = item,
+            progressPercent = percent,
+        )
+    }
+    currentRedTrackScrobbleItem = null
+    hasRequestedRedTrackScrobbleStartForCurrentItem = false
+    redTrackScrobbleStartRequestGeneration += 1L
+}
+
+internal fun PlayerScreenRuntime.emitStopRedTrackScrobbleForCurrentProgress() {
+    val progressPercent = currentPlaybackProgressPercent()
+    if (progressPercent >= 1f && progressPercent < 80f) {
+        emitRedTrackScrobbleStop(progressPercent)
+        return
+    }
+
+    if (progressPercent >= 80f && !hasSentCompletionRedTrackScrobbleForCurrentItem) {
+        hasSentCompletionRedTrackScrobbleForCurrentItem = true
+        emitRedTrackScrobbleStop(progressPercent)
+    }
+}
+
 internal fun PlayerScreenRuntime.emitStopScrobbleForCurrentProgress() {
     val progressPercent = currentPlaybackProgressPercent()
     if (progressPercent >= 1f && progressPercent < 80f) {
@@ -194,6 +292,7 @@ internal suspend fun PlayerScreenRuntime.resolveParentalGuideImdbId(): String? {
 
 internal fun PlayerScreenRuntime.flushWatchProgress() {
     emitStopScrobbleForCurrentProgress()
+    emitStopRedTrackScrobbleForCurrentProgress()
     WatchProgressRepository.flushPlaybackProgress(
         session = playbackSession,
         snapshot = playbackSnapshot,
@@ -213,12 +312,16 @@ internal fun PlayerScreenRuntime.scheduleProgressSyncAfterSeek() {
         val progressPercent = currentPlaybackProgressPercent()
         if (progressPercent >= 1f && progressPercent < 80f) {
             emitTraktScrobbleStop(progressPercent)
+            emitRedTrackScrobbleStop(progressPercent)
             val shouldRestartScrobbleNow = shouldRestartScrobbleAfterSeek && shouldPlay
             if (shouldRestartScrobbleNow && playbackSnapshot.isPlaying) {
                 pendingScrobbleStartAfterSeek = false
+                pendingRedTrackScrobbleStartAfterSeek = false
                 emitTraktScrobbleStart()
+                emitRedTrackScrobbleStart()
             } else if (shouldRestartScrobbleNow) {
                 pendingScrobbleStartAfterSeek = true
+                pendingRedTrackScrobbleStartAfterSeek = true
             }
         }
     }

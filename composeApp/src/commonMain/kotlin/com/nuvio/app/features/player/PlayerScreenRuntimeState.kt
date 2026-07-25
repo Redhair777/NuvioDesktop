@@ -16,6 +16,7 @@ import com.nuvio.app.features.p2p.P2pStreamingState
 import com.nuvio.app.features.player.skip.NextEpisodeInfo
 import com.nuvio.app.features.player.skip.SkipInterval
 import com.nuvio.app.features.streams.StreamsUiState
+import com.nuvio.app.features.redtrack.RedTrackScrobbleItem
 import com.nuvio.app.features.trakt.TraktScrobbleItem
 import com.nuvio.app.features.watched.WatchedUiState
 import com.nuvio.app.features.watchprogress.WatchProgressUiState
@@ -152,8 +153,14 @@ internal class PlayerScreenRuntime(
     var hasRequestedScrobbleStartForCurrentItem by mutableStateOf(false)
     var scrobbleStartRequestGeneration by mutableStateOf(0L)
     var pendingScrobbleStartAfterSeek by mutableStateOf(false)
+    var pendingRedTrackScrobbleStartAfterSeek by mutableStateOf(false)
     var hasSentCompletionScrobbleForCurrentItem by mutableStateOf(false)
     var currentTraktScrobbleItem by mutableStateOf<TraktScrobbleItem?>(null)
+
+    var hasRequestedRedTrackScrobbleStartForCurrentItem by mutableStateOf(false)
+    var redTrackScrobbleStartRequestGeneration by mutableStateOf(0L)
+    var hasSentCompletionRedTrackScrobbleForCurrentItem by mutableStateOf(false)
+    var currentRedTrackScrobbleItem by mutableStateOf<RedTrackScrobbleItem?>(null)
 
     var showSourcesPanel by mutableStateOf(false)
     var showEpisodesPanel by mutableStateOf(false)
