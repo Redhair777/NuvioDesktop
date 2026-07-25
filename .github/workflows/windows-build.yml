@@ -37,11 +37,20 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Create local.properties
+      - name: Inject Supabase config into local.properties
+        shell: pwsh
         run: |
-          New-Item -ItemType File -Name "local.properties" -Value ""
+          @"
+          NUVIO_SUPABASE_URL=${{ secrets.NUVIO_SUPABASE_URL }}
+          NUVIO_SUPABASE_ANON_KEY=${{ secrets.NUVIO_SUPABASE_ANON_KEY }}
+          NUVIO_SUPABASE_FALLBACK_URL=${{ secrets.NUVIO_SUPABASE_FALLBACK_URL }}
+          "@ | Out-File -FilePath "local.properties" -Encoding utf8
 
       - name: Build Windows MSI
+        env:
+          NUVIO_SUPABASE_URL: ${{ secrets.NUVIO_SUPABASE_URL }}
+          NUVIO_SUPABASE_ANON_KEY: ${{ secrets.NUVIO_SUPABASE_ANON_KEY }}
+          NUVIO_SUPABASE_FALLBACK_URL: ${{ secrets.NUVIO_SUPABASE_FALLBACK_URL }}
         run: ./gradlew :composeApp:packageReleaseMsi --stacktrace --no-configuration-cache
 
       - name: Upload MSI artifact
