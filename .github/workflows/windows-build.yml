@@ -22,7 +22,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
-          lfs: true
 
       - name: Install WebView2 NuGet package
         shell: pwsh
