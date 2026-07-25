@@ -244,6 +244,7 @@ import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.trakt.TraktListTab
 import com.nuvio.app.features.trakt.TraktScrobbleRepository
 import com.nuvio.app.features.trakt.TraktSettingsRepository
+import com.nuvio.app.features.redtrack.RedTrackSettingsRepository
 import com.nuvio.app.features.updater.AppUpdaterHost
 import com.nuvio.app.features.updater.AppUpdaterPlatform
 import com.nuvio.app.features.updater.rememberAppUpdaterController
@@ -457,6 +458,7 @@ private suspend fun warmProfileBoundRepositories() {
         PlayerSettingsRepository.ensureLoaded()
         TraktAuthRepository.ensureLoaded()
         TraktSettingsRepository.ensureLoaded()
+        RedTrackSettingsRepository.ensureLoaded()
         WatchedRepository.ensureLoaded()
         WatchProgressRepository.ensureLoaded()
         CollectionSyncService.startObserving()
