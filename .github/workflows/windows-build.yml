@@ -23,27 +23,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Fetch real LFS objects (fallback to upstream if fork has none)
+      - name: Fetch real libmpv-2.dll (replace LFS pointer from upstream CDN)
         shell: pwsh
         run: |
-          $dll = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
-          if ((Get-Item $dll).Length -lt 1000) {
-            Write-Warning "libmpv-2.dll is an LFS pointer ($((Get-Item $dll).Length) bytes); fetching from upstream..."
-            git lfs install
-            git remote add upstream https://github.com/NuvioMedia/NuvioDesktop.git 2>`$null
-            git lfs fetch upstream HEAD
-            git lfs checkout
-            $newSize = (Get-Item $dll).Length
-            Write-Host "libmpv-2.dll after LFS fetch: $newSize bytes"
-          } else {
-            Write-Host "libmpv-2.dll is real ($((Get-Item $dll).Length) bytes)"
+          $dllPath = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
+          if ((Get-Item $dllPath).Length -lt 1000) {
+            Write-Warning "libmpv-2.dll is an LFS pointer ($((Get-Item $dllPath).Length) bytes); downloading real binary from upstream CDN..."
+            $url = "https://media.githubusercontent.com/media/NuvioMedia/NuvioDesktop/Dev/composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
+            Invoke-WebRequest -Uri $url -OutFile $dllPath
           }
-
-      - name: Verify libmpv-2.dll in working tree after LFS fetch
-        shell: pwsh
-        run: |
-          $dll = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
-          $size = (Get-Item $dll).Length
+          $size = (Get-Item $dllPath).Length
           Write-Host "libmpv-2.dll in working tree: $size bytes"
           if ($size -lt 100000000) {
             Write-Error "libmpv-2.dll in working tree is too small ($size bytes). Expected ~115,320,296."
