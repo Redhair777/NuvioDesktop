@@ -1,0 +1,65 @@
+name: Build Windows MSI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Windows MSI
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install WebView2 NuGet package
+        shell: pwsh
+        run: |
+          nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\.nuget\packages"
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Create local.properties
+        run: |
+          New-Item -ItemType File -Name "local.properties" -Value ""
+
+      - name: Build Windows MSI
+        run: ./gradlew :composeApp:packageReleaseMsi --stacktrace --no-configuration-cache
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: nuvio-windows-msi
+          path: |
+            composeApp/build/compose/binaries/main-release/msi/*.msi
+            composeApp/build/compose/release-msis/*.msi
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        shell: pwsh
+        run: |
+          $tag = "win-dev-$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
+          $msi = Get-ChildItem -Path composeApp/build/compose/binaries/main-release/msi/*.msi, composeApp/build/compose/release-msis/*.msi -File | Select-Object -First 1
+          if (-not $msi) {
+            Write-Error "No MSI file found"
+            exit 1
+          }
+          gh release create $tag --target "$env:GITHUB_REF_NAME" --title "Windows dev build $tag" --notes "Development build for Windows testing" --prerelease "$($msi.FullName)"
