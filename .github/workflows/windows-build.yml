@@ -63,6 +63,16 @@ jobs:
           NUVIO_SUPABASE_FALLBACK_URL=${{ secrets.NUVIO_SUPABASE_FALLBACK_URL }}
           "@ | Out-File -FilePath "local.properties" -Encoding utf8
 
+      - name: Clean build outputs and verify DLL propagation
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force composeApp/build/native -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force composeApp/build/compose -ErrorAction SilentlyContinue
+          $dll = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
+          $size = (Get-Item $dll).Length
+          Write-Host "Pre-build DLL check: $dll is $size bytes"
+          if ($size -lt 100000000) { throw "DLL is too small ($size) before build" }
+
       - name: Build Windows MSI
         env:
           NUVIO_SUPABASE_URL: ${{ secrets.NUVIO_SUPABASE_URL }}
@@ -79,23 +89,23 @@ jobs:
             exit 1
           }
           Write-Host "Verifying libmpv-2.dll inside MSI: $($msi.FullName) ($($msi.Length) bytes)"
-          Write-Host "=== Listing all files inside MSI ==="
-          & "$env:ProgramFiles\7-Zip\7z.exe" l "$($msi.FullName)" | Select-String -Pattern "\.dll|\.cab|\.exe|\.jar"
+          Write-Host "=== Full 7z listing (showing all files) ==="
+          & "$env:ProgramFiles\7-Zip\7z.exe" l "$($msi.FullName)" | Select-Object -Skip 12
           Write-Host "=== Extracting all files ==="
           $extractDir = Join-Path $env:RUNNER_TEMP "msi-verify"
           Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
           & "$env:ProgramFiles\7-Zip\7z.exe" x "$($msi.FullName)" -o"$extractDir" -y -bd 2>&1 | Select-Object -Last 5
-          Write-Host "=== Searching for libmpv-2.dll ==="
-          $foundDlls = Get-ChildItem -Recurse -Filter *.dll $extractDir
-          $foundDlls | ForEach-Object { Write-Host "  $($_.FullName): $($_.Length) bytes" }
-          $dllInMsi = $foundDlls | Where-Object { $_.Name -match "mpv|libmpv" } | Select-Object -First 1
+          Write-Host "=== Directory listing of extracted files ==="
+          Get-ChildItem -Recurse $extractDir | Sort-Object Length -Descending | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.Length) bytes - $($_.FullName)" }
+          Write-Host "=== Searching for libmpv-2.dll in extracted files ==="
+          $dllInMsi = Get-ChildItem -Recurse $extractDir | Where-Object { $_.Name -match "mpv|libmpv" } | Select-Object -First 1
           if (-not $dllInMsi) {
-            $dllInMsi = $foundDlls | Sort-Object Length -Descending | Select-Object -First 1
-            if ($dllInMsi.Length -lt 100000000) {
-              Write-Error "No libmpv-2.dll found inside the MSI. Largest DLL: $($dllInMsi.Name) at $($dllInMsi.Length) bytes"
-              exit 1
-            }
-            Write-Host "WARNING: No DLL named 'mpv' found; using largest DLL as best guess"
+            Write-Host "No file named 'mpv' found. Checking all files over 50MB..."
+            $dllInMsi = Get-ChildItem -Recurse $extractDir | Where-Object { $_.Length -gt 50000000 } | Sort-Object Length -Descending | Select-Object -First 1
+          }
+          if (-not $dllInMsi) {
+            Write-Error "No file over 50MB found in the MSI. The DLL was likely not bundled."
+            exit 1
           }
           $size = $dllInMsi.Length
           Write-Host "libmpv-2.dll inside MSI: $($dllInMsi.FullName) is $size bytes"
