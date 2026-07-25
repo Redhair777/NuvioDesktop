@@ -604,6 +604,7 @@ if (isMacHost && isMacosDmgBuildRequested && macosPlayerBridgeArch != macosHostJ
 val macosPlayerBridgeOutput = layout.buildDirectory.file("native/macos/$macosPlayerBridgeArch/libplayer_bridge.dylib")
 val macosPlayerRuntimeOutput = layout.buildDirectory.dir("native/macos-runtime/$macosPlayerBridgeArch")
 val macosPlayerAppResourcesRoot = layout.buildDirectory.dir("generated/macos-player-app-resources")
+val windowsPlayerAppResourcesRoot = layout.buildDirectory.dir("generated/windows-player-app-resources")
 val macosDmgArchName = macosPlayerBridgeArch
 val isMacosDmgNotarizationRequested = requestedGradleTasks.any { taskName ->
     taskName == "notarizedmg" || taskName == "notarizereleasedmg"
@@ -927,6 +928,16 @@ val prepareMacosPlayerAppResources = tasks.register<Sync>("prepareMacosPlayerApp
     into(macosPlayerAppResourcesRoot.map { it.dir("macos/native/macos") })
 }
 
+val prepareWindowsPlayerAppResources = tasks.register<Sync>("prepareWindowsPlayerAppResources") {
+    enabled = isWindowsHost
+    dependsOn(buildWindowsPlayerBridge, prepareWindowsPlayerRuntime)
+    from(windowsPlayerBridgeOutput)
+    from(windowsPlayerRuntimeOutput) {
+        include("*.dll")
+    }
+    into(windowsPlayerAppResourcesRoot.map { it.dir("windows/native/windows") })
+}
+
 tasks.withType<Jar>().configureEach {
     if (isWindowsHost && name == "desktopJar") {
         dependsOn(buildWindowsPlayerBridge, prepareWindowsPlayerRuntime, generateWindowsPlayerRuntimeIndex)
@@ -942,6 +953,9 @@ tasks.withType<Jar>().configureEach {
 tasks.matching { it.name == "prepareAppResources" }.configureEach {
     if (isMacHost) {
         dependsOn(prepareMacosPlayerAppResources)
+    }
+    if (isWindowsHost) {
+        dependsOn(prepareWindowsPlayerAppResources)
     }
 }
 
@@ -1178,6 +1192,9 @@ compose.desktop {
             if (isMacHost) {
                 appResourcesRootDir.set(macosPlayerAppResourcesRoot)
             }
+            if (isWindowsHost) {
+                appResourcesRootDir.set(windowsPlayerAppResourcesRoot)
+            }
             modules(
                 "java.instrument",
                 "java.management",
@@ -1225,6 +1242,7 @@ compose.desktop {
             windows {
                 iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon.ico"))
                 upgradeUuid = windowsMsiUpgradeUuid
+                console = true
                 shortcut = true
                 menu = true
                 menuGroup = "Nuvio"

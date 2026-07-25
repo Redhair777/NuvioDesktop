@@ -92,30 +92,34 @@ jobs:
           $extractDir = Join-Path $env:RUNNER_TEMP "msi-verify"
           Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
           & "$env:ProgramFiles\7-Zip\7z.exe" x "$($msi.FullName)" -o"$extractDir" -y -bd 2>&1 | Select-Object -Last 3
-          Write-Host "=== Extracting JAR files from MSI ==="
           $foundDll = $false
+          Write-Host "=== Searching all sources for libmpv-2.dll in extracted MSI ==="
           Get-ChildItem -Recurse -Filter *.jar $extractDir | ForEach-Object {
             $jar = $_.FullName
             Write-Host "Checking JAR: $($jar) ($($_.Length) bytes)"
             & "$env:ProgramFiles\7-Zip\7z.exe" l "$jar" *libmpv-2.dll 2>&1 | Select-String -Pattern "libmpv-2" | ForEach-Object {
               Write-Host "Found in JAR! $_"
               & "$env:ProgramFiles\7-Zip\7z.exe" x "$jar" -o"$extractDir\jar-out" -y *libmpv-2.dll -bd 2>&1 | Out-Null
-              $dllPath = Get-ChildItem -Recurse -Filter libmpv-2.dll "$extractDir\jar-out" | Select-Object -First 1
-              if ($dllPath) {
-                $size = $dllPath.Length
-                Write-Host "libmpv-2.dll extracted from JAR: $($dllPath.FullName) is $size bytes"
-                if ($size -ge 100000000) {
-                  Write-Host "PASS: libmpv-2.dll inside MSI is valid ($size bytes)"
-                  $foundDll = $true
-                } else {
-                  Write-Error "libmpv-2.dll inside MSI/JAR is too small: $size bytes"
-                  exit 1
-                }
-              }
             }
           }
-          if (-not $foundDll) {
-            Write-Error "libmpv-2.dll not found in any JAR inside the MSI. The DLL was likely not bundled."
+          $dllFiles = Get-ChildItem -Recurse -Filter libmpv-2.dll $extractDir
+          if (-not $dllFiles) {
+            Write-Error "libmpv-2.dll not found anywhere inside the extracted MSI."
+            exit 1
+          }
+          Write-Host "=== All libmpv-2.dll instances found ==="
+          $maxSize = 0
+          $maxPath = ""
+          foreach ($dll in $dllFiles) {
+            $size = $dll.Length
+            $loc = if ($dll.FullName -match '\\(jar-out|\.jar)\\') { "inside-JAR" } else { "standalone (appResourcesRootDir)" }
+            Write-Host "  $($dll.FullName): $size bytes ($loc)"
+            if ($size -gt $maxSize) { $maxSize = $size; $maxPath = $dll.FullName }
+          }
+          if ($maxSize -ge 100000000) {
+            Write-Host "PASS: libmpv-2.dll found at full size ($maxSize bytes) at: $maxPath"
+          } else {
+            Write-Error "FAIL: Largest libmpv-2.dll found is only $maxSize bytes (expected ~115,320,296). Location: $maxPath"
             exit 1
           }
 
