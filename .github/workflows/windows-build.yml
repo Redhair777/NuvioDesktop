@@ -22,6 +22,23 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
+          lfs: true
+
+      - name: Fetch real LFS objects (fallback to upstream if fork has none)
+        shell: pwsh
+        run: |
+          $dll = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
+          if ((Get-Item $dll).Length -lt 1000) {
+            Write-Warning "libmpv-2.dll is an LFS pointer ($((Get-Item $dll).Length) bytes); fetching from upstream..."
+            git remote add upstream https://github.com/NuvioMedia/NuvioDesktop.git 2>$null
+            git lfs fetch upstream HEAD
+            git lfs checkout
+            if ((Get-Item $dll).Length -lt 100000000) {
+              Write-Error "libmpv-2.dll is still too small ($((Get-Item $dll).Length) bytes) after LFS fetch."
+              exit 1
+            }
+          }
+          Write-Host "libmpv-2.dll confirmed: $((Get-Item $dll).Length) bytes"
 
       - name: Install WebView2 NuGet package
         shell: pwsh
@@ -52,6 +69,31 @@ jobs:
           NUVIO_SUPABASE_ANON_KEY: ${{ secrets.NUVIO_SUPABASE_ANON_KEY }}
           NUVIO_SUPABASE_FALLBACK_URL: ${{ secrets.NUVIO_SUPABASE_FALLBACK_URL }}
         run: ./gradlew :composeApp:packageReleaseMsi --stacktrace --no-configuration-cache
+
+      - name: Verify libmpv-2.dll inside packaged MSI
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path composeApp/build/compose/binaries/main-release/msi/*.msi, composeApp/build/compose/release-msis/*.msi -File | Select-Object -First 1
+          if (-not $msi) {
+            Write-Error "No MSI file found for verification"
+            exit 1
+          }
+          Write-Host "Verifying libmpv-2.dll inside MSI: $($msi.FullName) ($($msi.Length) bytes)"
+          $extractDir = Join-Path $env:RUNNER_TEMP "msi-verify"
+          Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+          & "$env:ProgramFiles\7-Zip\7z.exe" x "$($msi.FullName)" -o"$extractDir" -y *libmpv-2.dll | Select-String -Pattern "libmpv-2"
+          $dllInMsi = Get-ChildItem -Recurse -Filter libmpv-2.dll $extractDir | Select-Object -First 1
+          if (-not $dllInMsi) {
+            Write-Error "libmpv-2.dll not found inside the MSI!"
+            exit 1
+          }
+          $size = $dllInMsi.Length
+          Write-Host "libmpv-2.dll inside MSI: $($dllInMsi.FullName) is $size bytes"
+          if ($size -lt 100000000) {
+            Write-Error "libmpv-2.dll inside MSI is too small: $size bytes (expected ~115,320,296). The real DLL was not bundled."
+            exit 1
+          }
+          Write-Host "PASS: libmpv-2.dll inside MSI is valid ($size bytes)"
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v6
