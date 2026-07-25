@@ -23,21 +23,24 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Fetch real libmpv-2.dll from upstream LFS
+      - name: Fetch real libmpv-2.dll (replace LFS pointer)
         shell: pwsh
         run: |
-          $dll = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
-          if ((Get-Item $dll).Length -lt 1000) {
-            Write-Warning "libmpv-2.dll is an LFS pointer ($((Get-Item $dll).Length) bytes); fetching from upstream..."
-            git remote add upstream https://github.com/NuvioMedia/NuvioDesktop.git 2>$null
-            git lfs fetch upstream HEAD
-            git lfs checkout
-            if ((Get-Item $dll).Length -lt 100000000) {
-              Write-Error "libmpv-2.dll is still too small ($((Get-Item $dll).Length) bytes) after LFS fetch."
+          $dllPath = "composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
+          $stubSize = 134L
+          if ((Get-Item $dllPath).Length -eq $stubSize) {
+            Write-Warning "libmpv-2.dll is a $stubSize-byte LFS pointer; downloading real binary from upstream CDN..."
+            $url = "https://media.githubusercontent.com/media/NuvioMedia/NuvioDesktop/Dev/composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll"
+            Invoke-WebRequest -Uri $url -OutFile $dllPath
+            $actualSize = (Get-Item $dllPath).Length
+            if ($actualSize -lt 100000000) {
+              Write-Error "libmpv-2.dll is too small ($actualSize bytes) after download. Expected ~115,320,296."
               exit 1
             }
+            Write-Host "libmpv-2.dll downloaded: $actualSize bytes"
+          } else {
+            Write-Host "libmpv-2.dll already real: $((Get-Item $dllPath).Length) bytes"
           }
-          Write-Host "libmpv-2.dll confirmed: $((Get-Item $dll).Length) bytes"
 
       - name: Install WebView2 NuGet package
         shell: pwsh
